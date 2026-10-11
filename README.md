@@ -111,7 +111,9 @@ A fresh local Python 3.14 development environment was also verified.
 
 GitHub Actions is configured to check dependencies, formatting, linting,
 tests and CLI execution on Ubuntu with Python 3.12 and 3.14.
-Remote CI results remain pending until the workflow runs on GitHub.
+GitHub Actions passed on Python 3.12 and 3.14 for commit `8686c16`.
+
+Verified run: [CI results](https://github.com/yahyarabass06-cell/soc-evidence-pipeline/actions/runs/38164748884).
 
 ## Evaluation
 
