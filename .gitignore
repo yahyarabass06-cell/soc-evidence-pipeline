@@ -1,0 +1,22 @@
+# Python environments and generated files
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Test and quality tool caches
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Local secrets and generated reports
+.env
+.env.*
+!.env.example
+reports/
+
+# Real logs must stay outside version control
+data/raw/
