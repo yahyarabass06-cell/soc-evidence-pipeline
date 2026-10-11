@@ -4,8 +4,9 @@ Explainable Linux authentication detection and investigation pipeline.
 
 ## Status
 
-Under development. Event validation, provenance and synthetic JSON Lines
-ingestion are implemented. Detection rules are not implemented yet.
+Under development. Event validation, provenance, synthetic JSON Lines
+and limited SSH password log ingestion are implemented.
+Detection rules are not implemented yet.
 
 ## Requirements
 
@@ -60,7 +61,37 @@ Git ignore rules are not a security boundary.
 
 ## Limitations
 
-- Only the synthetic JSON schema is supported.
-- SSH parsing, detection rules and reports are pending.
+- JSON ingestion requires the documented synthetic schema.
+- SSH ingestion supports only the password messages described below.
+- Detection rules and reports are pending.
 - Source references do not verify file integrity.
 - Exact dependency versions are not locked yet.
+
+## Supported SSH Input
+
+The current parser supports:
+- ISO timestamps containing a year and timezone.
+- `sshd[PID]` messages.
+- `Accepted password` and `Failed password`.
+- Failed authentication for an `invalid user`.
+- IPv4 and IPv6 addresses.
+- An optional trailing `[preauth]` marker.
+
+Read the synthetic example:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from soc_evidence.reading import iter_ssh_events
+
+events = list(iter_ssh_events(Path("data/synthetic/ssh-demo.log")))
+print(f"Completed: {len(events)} SSH events")
+PY
+```
+
+Expected output: `Completed: 3 SSH events`.
+
+This is not a general-purpose system log parser.
+Unsupported messages stop ingestion rather than being silently ignored.
+Public-key authentication, PAM messages and dates without a year or
+timezone are not currently supported.

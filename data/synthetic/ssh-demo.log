@@ -1,0 +1,3 @@
+2026-10-11T16:00:00Z lab-server sshd[123]: Failed password for student from 192.0.2.10 port 45000 ssh2
+2026-10-11T16:00:30Z lab-server sshd[123]: Failed password for student from 192.0.2.10 port 45001 ssh2
+2026-10-11T16:01:00Z lab-server sshd[123]: Accepted password for student from 192.0.2.10 port 45002 ssh2
