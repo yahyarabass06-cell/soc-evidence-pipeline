@@ -12,7 +12,10 @@ from soc_evidence.detection import (
     detect_multi_account_failures,
     detect_success_after_failures,
 )
+from soc_evidence.exporting import write_new_report
+from soc_evidence.markdown_reporting import render_markdown
 from soc_evidence.reading import iter_json_events, iter_ssh_events
+from soc_evidence.reporting import serialize_alert
 
 
 def threshold_value(value: str) -> int:
@@ -71,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
             help=f"Window in seconds for the {name} rule (default: {seconds}).",
         )
 
+    parser.add_argument("--output", type=Path, help="New report file")
+    parser.add_argument("--output-format", choices=("json", "markdown"), default="json")
     args = parser.parse_args(argv)
     reader = iter_json_events if args.format == "jsonl" else iter_ssh_events
 
@@ -90,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         records = list(reader(args.input))
         unique = deduplicate_records(records)
         alert_counts = {}
+        alert_details = []
 
         for rule_name, (_, detector) in rules.items():
             settings = configuration[rule_name]
@@ -99,8 +105,10 @@ def main(argv: list[str] | None = None) -> int:
                 window=timedelta(seconds=settings["window_seconds"]),
             )
             alert_counts[rule_name] = len(alerts)
+            alert_details.extend(serialize_alert(rule_name, alert) for alert in alerts)
 
         summary = {
+            "schema_version": 1,
             "status": "complete",
             "input_format": args.format,
             "records_read": len(records),
@@ -108,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             "duplicates_removed": unique.duplicates_removed,
             "configuration": configuration,
             "alerts": alert_counts,
+            "alert_details": alert_details,
         }
     except (OSError, UnicodeError, ValueError) as exc:
         print(
@@ -116,7 +125,23 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    print(json.dumps(summary, indent=2))
+    content = (
+        render_markdown(summary)
+        if args.output_format == "markdown"
+        else json.dumps(summary, indent=2) + "\n"
+    )
+    if args.output is not None:
+        try:
+            write_new_report(args.output, content)
+        except OSError as exc:
+            print(
+                f"Error: {type(exc).__name__}; report was not saved.",
+                file=sys.stderr,
+            )
+            return 1
+        print("Report saved.", file=sys.stderr)
+    else:
+        print(content, end="")
     return 0
 
 

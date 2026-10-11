@@ -64,7 +64,7 @@ Git ignore rules are not a security boundary.
 
 - JSON ingestion requires the documented synthetic schema.
 - SSH ingestion supports only the password messages described below.
-- Detailed reports and operational evaluation are pending.
+- Operational evaluation, CI and final reproducibility checks are pending.
 - Source references do not verify file integrity.
 - Exact dependency versions are not locked yet.
 
@@ -228,7 +228,7 @@ Exit codes:
 - 1: input or analysis error.
 - 2: invalid command-line arguments.
 
-The current output is a summary, not a detailed investigation report.
+JSON output includes summary counts, configuration and detailed alert evidence.
 
 ## Detection Configuration
 
@@ -253,3 +253,30 @@ soc-evidence data/synthetic/ssh-failure-burst.log --format ssh --failure-thresho
 
 Expected result: zero alerts for this five-failure fixture.
 The JSON output records the effective configuration for all three rules.
+
+## Report Export
+
+JSON reports include `schema_version`, effective configuration,
+alert counts and detailed evidence in `alert_details`.
+
+Print Markdown:
+
+```bash
+soc-evidence data/synthetic/ssh-success-after-failures.log --format ssh --output-format markdown
+```
+
+Save a new report:
+
+```bash
+mkdir -p reports
+soc-evidence data/synthetic/ssh-success-after-failures.log --format ssh --output reports/example.json
+soc-evidence data/synthetic/ssh-success-after-failures.log --format ssh --output-format markdown --output reports/example.md
+```
+
+The output directory must exist. Existing files are never overwritten.
+On Linux, exported files are created with owner-only permissions.
+Generated reports under `reports/` are ignored by Git.
+
+Reports contain usernames, IP addresses and source paths.
+Use synthetic examples for public demonstrations.
+An export error returns exit code 1; a failed write may leave a partial file.
