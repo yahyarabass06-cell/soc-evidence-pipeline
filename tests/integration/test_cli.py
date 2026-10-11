@@ -95,3 +95,80 @@ def test_installed_command_runs_outside_repository(tmp_path):
     summary = json.loads(result.stdout)
     assert summary["records_read"] == 5
     assert summary["alerts"]["failure_burst"] == 1
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        "--failure-threshold",
+        "--success-threshold",
+        "--account-threshold",
+        "--failure-window",
+        "--success-window",
+        "--account-window",
+    ],
+)
+def test_invalid_configuration_is_rejected_before_reading(option):
+    result = run_cli("unused.log", "--format", "ssh", option, "0")
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "FileNotFoundError" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("file_name", "option", "rule_name"),
+    [
+        (
+            "ssh-failure-burst.log",
+            "--failure-threshold",
+            "failure_burst",
+        ),
+        (
+            "ssh-success-after-failures.log",
+            "--success-threshold",
+            "success_after_failures",
+        ),
+        (
+            "ssh-multi-account.log",
+            "--account-threshold",
+            "multi_account_failures",
+        ),
+    ],
+)
+def test_custom_threshold_changes_detection(file_name, option, rule_name):
+    path = REPOSITORY_ROOT / "data" / "synthetic" / file_name
+
+    result = run_cli(path, "--format", "ssh", option, "10")
+
+    assert result.returncode == 0
+    summary = json.loads(result.stdout)
+    assert summary["configuration"][rule_name]["threshold"] == 10
+    assert summary["alerts"][rule_name] == 0
+
+
+def test_custom_window_changes_detection():
+    path = REPOSITORY_ROOT / "data" / "synthetic" / "ssh-failure-burst.log"
+
+    result = run_cli(path, "--format", "ssh", "--failure-window", "10")
+
+    assert result.returncode == 0
+    summary = json.loads(result.stdout)
+    assert summary["configuration"]["failure_burst"]["window_seconds"] == 10
+    assert summary["alerts"]["failure_burst"] == 0
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--failure-threshold", "1"),
+        ("--success-window", "abc"),
+        ("--account-window", "86401"),
+    ],
+)
+def test_configuration_limits_return_argument_error(option, value):
+    result = run_cli("unused.log", "--format", "ssh", option, value)
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "Traceback" not in result.stderr

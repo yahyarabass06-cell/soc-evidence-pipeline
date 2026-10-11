@@ -64,7 +64,7 @@ Git ignore rules are not a security boundary.
 
 - JSON ingestion requires the documented synthetic schema.
 - SSH ingestion supports only the password messages described below.
-- Detailed reports, configurable thresholds and operational evaluation are pending.
+- Detailed reports and operational evaluation are pending.
 - Source references do not verify file integrity.
 - Exact dependency versions are not locked yet.
 
@@ -216,7 +216,7 @@ soc-evidence data/synthetic/auth-demo.jsonl --format jsonl
 soc-evidence --help
 ```
 
-The CLI executes all three rules with their default parameters.
+The CLI executes all three rules with default or custom parameters.
 It prints a JSON summary containing event counts, duplicate counts
 and alert counts per rule.
 
@@ -229,3 +229,27 @@ Exit codes:
 - 2: invalid command-line arguments.
 
 The current output is a summary, not a detailed investigation report.
+
+## Detection Configuration
+
+| Option | Default | Meaning |
+|---|---:|---|
+| `--failure-threshold` | 5 | Failures against one account |
+| `--failure-window` | 120 | Failure window in seconds |
+| `--success-threshold` | 3 | Failures preceding a success |
+| `--success-window` | 120 | Success lookback in seconds |
+| `--account-threshold` | 5 | Distinct accounts with failures |
+| `--account-window` | 300 | Multi-account window in seconds |
+
+Thresholds must be integers of at least 2.
+CLI windows must be integers from 1 to 86400 seconds.
+The one-day maximum is a scope limit, not an operational recommendation.
+
+Example:
+
+```bash
+soc-evidence data/synthetic/ssh-failure-burst.log --format ssh --failure-threshold 6
+```
+
+Expected result: zero alerts for this five-failure fixture.
+The JSON output records the effective configuration for all three rules.
