@@ -6,7 +6,7 @@ Explainable Linux authentication detection and investigation pipeline.
 
 Under development. Event validation, provenance, synthetic JSON Lines
 and limited SSH password log ingestion are implemented.
-Detection rules are not implemented yet.
+Repeated authentication failure detection is implemented.
 
 ## Requirements
 
@@ -63,7 +63,7 @@ Git ignore rules are not a security boundary.
 
 - JSON ingestion requires the documented synthetic schema.
 - SSH ingestion supports only the password messages described below.
-- Detection rules and reports are pending.
+- Two additional detection rules and report generation are pending.
 - Source references do not verify file integrity.
 - Exact dependency versions are not locked yet.
 
@@ -95,3 +95,36 @@ This is not a general-purpose system log parser.
 Unsupported messages stop ingestion rather than being silently ignored.
 Public-key authentication, PAM messages and dates without a year or
 timezone are not currently supported.
+
+## Repeated Authentication Failure Detection
+
+Default parameters:
+- Threshold: 5 failures.
+- Sliding window: 120 seconds, inclusive.
+- Grouping: hostname, source IP and username.
+
+Events are sorted by timestamp before analysis.
+An alert is emitted when the failure count crosses the threshold.
+A new alert becomes possible after the count falls below the threshold.
+Successful authentication does not clear previous failures.
+
+Run the synthetic demonstration:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from soc_evidence.detection import detect_failure_bursts
+from soc_evidence.reading import iter_ssh_events
+
+path = Path("data/synthetic/ssh-failure-burst.log")
+alerts = detect_failure_bursts(iter_ssh_events(path))
+print(f"Completed: {len(alerts)} alerts")
+PY
+```
+
+Expected output: `Completed: 1 alerts`.
+
+These parameters are demonstration defaults, not validated production
+recommendations. An alert does not prove malicious activity.
+The current implementation sorts input in memory.
+Duplicate input records are not yet handled.

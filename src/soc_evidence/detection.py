@@ -1,0 +1,63 @@
+"""Detect repeated authentication failures in a sliding time window."""
+
+from collections import deque
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import timedelta
+
+from soc_evidence.models import RecordedEvent
+
+
+@dataclass(frozen=True)
+class FailureBurstAlert:
+    """Evidence collected when a failure threshold is crossed."""
+
+    hostname: str
+    source_ip: str
+    username: str
+    evidence: tuple[RecordedEvent, ...]
+
+
+def detect_failure_bursts(
+    events: Iterable[RecordedEvent],
+    *,
+    threshold: int = 5,
+    window: timedelta = timedelta(minutes=2),
+) -> list[FailureBurstAlert]:
+    """Detect threshold crossings per host, source IP and username."""
+    if type(threshold) is not int or threshold < 2:
+        raise ValueError("threshold must be an integer of at least 2")
+
+    if not isinstance(window, timedelta) or window <= timedelta(0):
+        raise ValueError("window must be a positive timedelta")
+
+    ordered = sorted(events, key=lambda item: item.event.timestamp)
+    histories: dict[tuple[str, str, str], deque[RecordedEvent]] = {}
+    alerts = []
+
+    for recorded in ordered:
+        event = recorded.event
+        if event.outcome != "failure":
+            continue
+
+        key = (event.hostname, event.source_ip, event.username)
+        history = histories.setdefault(key, deque())
+        cutoff = event.timestamp - window
+
+        while history and history[0].event.timestamp < cutoff:
+            history.popleft()
+
+        was_above_threshold = len(history) >= threshold
+        history.append(recorded)
+
+        if len(history) >= threshold and not was_above_threshold:
+            alerts.append(
+                FailureBurstAlert(
+                    hostname=event.hostname,
+                    source_ip=event.source_ip,
+                    username=event.username,
+                    evidence=tuple(history),
+                )
+            )
+
+    return alerts
