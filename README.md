@@ -325,3 +325,8 @@ Actions currently use major-version tags rather than immutable commit SHAs.
 
 See [Architecture](docs/architecture.md) for the processing diagram,
 module responsibilities, design decisions and current limitations.
+
+## Security
+
+See [Security Considerations](SECURITY.md) for authorized use,
+data protection, input and output boundaries, and vulnerability reporting.
