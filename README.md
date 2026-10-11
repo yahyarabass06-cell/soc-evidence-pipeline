@@ -64,7 +64,7 @@ Git ignore rules are not a security boundary.
 
 - JSON ingestion requires the documented synthetic schema.
 - SSH ingestion supports only the password messages described below.
-- CLI, report generation and operational evaluation are pending.
+- Detailed reports, configurable thresholds and operational evaluation are pending.
 - Source references do not verify file integrity.
 - Exact dependency versions are not locked yet.
 
@@ -205,3 +205,27 @@ This pattern may warrant investigation for password spraying.
 Logs do not reveal attempted passwords, so the rule cannot establish
 that the same password was tried across accounts.
 Shared source IPs and legitimate activity may produce false positives.
+
+## Command-Line Interface
+
+After installation, analyze a file with:
+
+```bash
+soc-evidence data/synthetic/ssh-failure-burst.log --format ssh
+soc-evidence data/synthetic/auth-demo.jsonl --format jsonl
+soc-evidence --help
+```
+
+The CLI executes all three rules with their default parameters.
+It prints a JSON summary containing event counts, duplicate counts
+and alert counts per rule.
+
+Results are written to stdout. Errors are written to stderr.
+No completed summary is emitted if ingestion or detection fails.
+
+Exit codes:
+- 0: analysis completed, including when alerts were found.
+- 1: input or analysis error.
+- 2: invalid command-line arguments.
+
+The current output is a summary, not a detailed investigation report.
