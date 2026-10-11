@@ -123,3 +123,60 @@ def detect_success_after_failures(
         history.clear()
 
     return alerts
+
+
+@dataclass(frozen=True)
+class MultiAccountFailureAlert:
+    """Failed authentication targeting several distinct accounts."""
+
+    hostname: str
+    source_ip: str
+    usernames: tuple[str, ...]
+    evidence: tuple[RecordedEvent, ...]
+
+
+def detect_multi_account_failures(
+    events: Iterable[RecordedEvent],
+    *,
+    threshold: int = 5,
+    window: timedelta = timedelta(minutes=5),
+) -> list[MultiAccountFailureAlert]:
+    """Detect distinct-account threshold crossings per host and source IP."""
+    if type(threshold) is not int or threshold < 2:
+        raise ValueError("threshold must be an integer of at least 2")
+
+    if not isinstance(window, timedelta) or window <= timedelta(0):
+        raise ValueError("window must be a positive timedelta")
+
+    unique = deduplicate_records(events)
+    ordered = sorted(unique.records, key=lambda item: item.event.timestamp)
+    histories: dict[tuple[str, str], deque[RecordedEvent]] = {}
+    alerts = []
+
+    for recorded in ordered:
+        event = recorded.event
+        if event.outcome != "failure":
+            continue
+
+        key = (event.hostname, event.source_ip)
+        history = histories.setdefault(key, deque())
+        cutoff = event.timestamp - window
+
+        while history and history[0].event.timestamp < cutoff:
+            history.popleft()
+
+        previous_users = {item.event.username for item in history}
+        history.append(recorded)
+        current_users = previous_users | {event.username}
+
+        if len(previous_users) < threshold <= len(current_users):
+            alerts.append(
+                MultiAccountFailureAlert(
+                    hostname=event.hostname,
+                    source_ip=event.source_ip,
+                    usernames=tuple(sorted(current_users)),
+                    evidence=tuple(history),
+                )
+            )
+
+    return alerts

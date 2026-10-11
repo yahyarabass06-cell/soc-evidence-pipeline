@@ -6,7 +6,8 @@ Explainable Linux authentication detection and investigation pipeline.
 
 Under development. Event validation, provenance, synthetic JSON Lines
 and limited SSH password log ingestion are implemented.
-Repeated failure and success-after-failures detection are implemented.
+Three authentication detection rules are implemented: repeated failures,
+success after failures, and failures across multiple accounts.
 
 ## Requirements
 
@@ -63,7 +64,7 @@ Git ignore rules are not a security boundary.
 
 - JSON ingestion requires the documented synthetic schema.
 - SSH ingestion supports only the password messages described below.
-- Multi-account detection and report generation are pending.
+- CLI, report generation and operational evaluation are pending.
 - Source references do not verify file integrity.
 - Exact dependency versions are not locked yet.
 
@@ -170,3 +171,37 @@ Expected output: one alert with four evidence records.
 
 This pattern can also represent legitimate password mistakes.
 The alert requires contextual investigation and does not prove compromise.
+
+## Multi-Account Authentication Failures
+
+Default parameters:
+- At least 5 distinct usernames with failed authentication.
+- A 300-second sliding window, inclusive.
+- Matching hostname and source IP.
+
+Repeated attempts against one username do not increase the account count.
+Successful authentications do not count toward this rule.
+An alert captures evidence at the threshold crossing.
+Further attempts do not update that alert.
+The rule rearms when the distinct-account count falls below the threshold.
+
+Run the synthetic example:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from soc_evidence.detection import detect_multi_account_failures
+from soc_evidence.reading import iter_ssh_events
+
+path = Path("data/synthetic/ssh-multi-account.log")
+alerts = detect_multi_account_failures(iter_ssh_events(path))
+print(f"Alerts: {len(alerts)}")
+PY
+```
+
+Expected output: one alert involving five distinct usernames.
+
+This pattern may warrant investigation for password spraying.
+Logs do not reveal attempted passwords, so the rule cannot establish
+that the same password was tried across accounts.
+Shared source IPs and legitimate activity may produce false positives.

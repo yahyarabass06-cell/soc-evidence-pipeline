@@ -6,6 +6,7 @@ import pytest
 
 from soc_evidence.detection import (
     detect_failure_bursts,
+    detect_multi_account_failures,
     detect_success_after_failures,
 )
 from soc_evidence.models import AuthEvent, RecordedEvent, SourceRef
@@ -259,3 +260,99 @@ def test_second_success_does_not_reuse_previous_failures():
     )
 
     assert len(detect_success_after_failures(events)) == 1
+
+
+def account_failures(times):
+    return [recorded_event(t, i + 1, username=f"user{i}") for i, t in enumerate(times)]
+
+
+def test_multi_account_alert_keeps_users_and_evidence():
+    events = account_failures([0, 10, 20, 30, 40])
+
+    alerts = detect_multi_account_failures(events)
+
+    assert len(alerts) == 1
+    assert alerts[0].usernames == ("user0", "user1", "user2", "user3", "user4")
+    assert alerts[0].evidence == tuple(events)
+
+
+def test_many_failures_for_one_account_do_not_trigger_multi_account_rule():
+    events = [recorded_event(i, i + 1) for i in range(10)]
+
+    assert detect_multi_account_failures(events) == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("hostname", "another-server"),
+        ("source_ip", "192.0.2.20"),
+    ],
+)
+def test_multi_account_rule_separates_hosts_and_ips(field, value):
+    events = account_failures([0, 10, 20, 30])
+    events.append(recorded_event(40, 5, username="user4", **{field: value}))
+
+    assert detect_multi_account_failures(events) == []
+
+
+@pytest.mark.parametrize(
+    ("last_second", "expected_count"),
+    [(300, 1), (301, 0)],
+)
+def test_multi_account_window_boundary(last_second, expected_count):
+    events = account_failures([0, 10, 20, 30, last_second])
+
+    assert len(detect_multi_account_failures(events)) == expected_count
+
+
+def test_multi_account_rule_rearms_after_expiration():
+    events = account_failures([0, 10, 20, 30, 40, 600, 610, 620, 630, 640])
+
+    assert len(detect_multi_account_failures(events)) == 2
+
+
+def test_duplicates_do_not_inflate_distinct_account_count():
+    events = account_failures([0, 10, 20, 30])
+
+    assert detect_multi_account_failures(events + events) == []
+
+
+def test_successful_accounts_do_not_count_for_multi_account_rule():
+    events = account_failures([0, 10, 20, 30])
+    events.append(recorded_event(40, 5, username="user4", outcome="success"))
+
+    assert detect_multi_account_failures(events) == []
+
+
+@pytest.mark.parametrize("threshold", [0, 1, True, 2.5, "5"])
+def test_multi_account_rule_rejects_invalid_threshold(threshold):
+    with pytest.raises(ValueError, match="threshold"):
+        detect_multi_account_failures([], threshold=threshold)
+
+
+@pytest.mark.parametrize(
+    "window",
+    [timedelta(0), timedelta(seconds=-1), 300, None],
+)
+def test_multi_account_rule_rejects_invalid_window(window):
+    with pytest.raises(ValueError, match="window"):
+        detect_multi_account_failures([], window=window)
+
+
+def test_multi_account_rule_sorts_unordered_input():
+    events = account_failures([0, 10, 20, 30, 40])
+
+    expected = detect_multi_account_failures(events)
+
+    assert len(expected) == 1
+    assert detect_multi_account_failures(reversed(events)) == expected
+
+
+def test_continuous_multi_account_burst_emits_one_alert():
+    events = account_failures([0, 10, 20, 30, 40, 50, 60])
+
+    alerts = detect_multi_account_failures(events)
+
+    assert len(alerts) == 1
+    assert len(alerts[0].usernames) == 5
