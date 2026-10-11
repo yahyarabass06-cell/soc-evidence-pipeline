@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 
+from soc_evidence.deduplication import deduplicate_records
 from soc_evidence.models import RecordedEvent
 
 
@@ -31,7 +32,8 @@ def detect_failure_bursts(
     if not isinstance(window, timedelta) or window <= timedelta(0):
         raise ValueError("window must be a positive timedelta")
 
-    ordered = sorted(events, key=lambda item: item.event.timestamp)
+    unique = deduplicate_records(events)
+    ordered = sorted(unique.records, key=lambda item: item.event.timestamp)
     histories: dict[tuple[str, str, str], deque[RecordedEvent]] = {}
     alerts = []
 

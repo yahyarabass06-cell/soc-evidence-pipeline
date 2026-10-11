@@ -127,3 +127,18 @@ def test_success_does_not_erase_previous_failures():
 
     assert len(alerts) == 1
     assert all(item.event.outcome == "failure" for item in alerts[0].evidence)
+
+
+def test_repeated_evidence_cannot_create_a_false_alert():
+    events = [recorded_event(i * 10, i + 1) for i in range(4)]
+
+    assert detect_failure_bursts(events + events) == []
+
+
+def test_repeated_evidence_does_not_inflate_an_alert():
+    events = [recorded_event(i * 10, i + 1) for i in range(5)]
+
+    alerts = detect_failure_bursts(events + events)
+
+    assert len(alerts) == 1
+    assert len(alerts[0].evidence) == 5

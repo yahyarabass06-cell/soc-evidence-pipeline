@@ -127,4 +127,16 @@ Expected output: `Completed: 1 alerts`.
 These parameters are demonstration defaults, not validated production
 recommendations. An alert does not prove malicious activity.
 The current implementation sorts input in memory.
-Duplicate input records are not yet handled.
+Repeated source references are deduplicated before detection.
+
+## Evidence Deduplication
+
+A source reference consists of the supplied file path and line number.
+
+- Repeated references with identical events are counted once.
+- Different source lines remain distinct, even with identical event content.
+- Conflicting events for the same reference stop analysis.
+- The deduplication result includes the number of duplicates removed.
+
+This does not identify copied files under different paths.
+File fingerprints and path normalization are not implemented yet.
