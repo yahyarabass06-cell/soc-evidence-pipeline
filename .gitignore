@@ -20,3 +20,7 @@ reports/
 
 # Real logs must stay outside version control
 data/raw/
+
+# Verification environments
+.venv-*/
+.venv-check/bin/pythonprintf

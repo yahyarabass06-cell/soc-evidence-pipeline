@@ -298,3 +298,25 @@ Large-file memory usage must be evaluated before operational use.
 
 Source-based deduplication still uses the supplied path and line number.
 Fingerprinting does not automatically deduplicate copied files.
+
+## Pinned Development Environment
+
+The development dependency snapshot is requirements-dev.lock.
+It records exact versions, including setuptools, but has no artifact hashes.
+It has been verified in a fresh local Python 3.14 environment.
+
+Install from the repository root:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    python -m pip install -r requirements-dev.lock
+    python -m pip install --no-build-isolation --no-deps -e .
+    python -m pip check
+
+## Continuous Integration
+
+The configured GitHub Actions workflow checks formatting, linting,
+dependencies, tests and CLI execution on Ubuntu with Python 3.12 and 3.14.
+
+Remote CI results are pending until the repository is pushed to GitHub.
+Actions currently use major-version tags rather than immutable commit SHAs.
