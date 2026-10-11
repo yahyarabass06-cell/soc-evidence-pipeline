@@ -1,332 +1,163 @@
 # SOC Evidence Pipeline
 
-Explainable Linux authentication detection and investigation pipeline.
+Explainable offline authentication detection with traceable evidence,
+configurable temporal rules, and JSON or Markdown investigation reports.
 
-## Status
+An educational defensive engineering project built in Python.
+The current implementation uses deterministic detection rules, not AI.
 
-Under development. Event validation, provenance, synthetic JSON Lines
-and limited SSH password log ingestion are implemented.
-Three authentication detection rules are implemented: repeated failures,
-success after failures, and failures across multiple accounts.
+## Features
 
-## Requirements
-
-Python 3.12 or newer and Git.
-Currently verified locally with Python 3.14 only.
+- Parse structured JSONL events and supported SSH password authentication logs.
+- Validate authentication events and normalize timestamps to UTC.
+- Preserve source file names and line numbers.
+- Deduplicate repeated records with identical source references.
+- Detect failure bursts, successful logins after failures, and multi-account failures.
+- Include effective detection settings and supporting evidence in reports.
+- Calculate SHA-256 over the input bytes used for analysis.
+- Export reports without overwriting existing files.
 
 ## Installation
 
-From the repository root:
+Use Python 3.12 or newer. The commands below target Linux and must be run
+from the repository root.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev]"
+python -m pip install -r requirements-dev.lock
+python -m pip install --no-build-isolation --no-deps -e .
+python -m pip check
 ```
+
+The application has no third-party runtime dependencies.
+The development dependency snapshot pins exact versions, including setuptools,
+but does not include artifact hashes.
 
 ## Usage
 
-```bash
-python - <<'PY'
-from pathlib import Path
-from soc_evidence.reading import iter_json_events
+Analyze the bundled synthetic failure burst:
 
-events = list(iter_json_events(Path("data/synthetic/auth-demo.jsonl")))
-print(f"Completed: {len(events)} valid events")
-PY
+```bash
+soc-evidence data/synthetic/ssh-failure-burst.log --format ssh
 ```
 
-Expected output: `Completed: 3 valid events`.
+Expected alert counts for this fixture with default settings:
+
+```json
+{
+  "failure_burst": 1,
+  "success_after_failures": 0,
+  "multi_account_failures": 0
+}
+```
+
+This excerpt is not the complete report. The full output also includes
+input provenance, configuration and the five supporting authentication events.
+
+Analyze a successful login following three failures:
+
+```bash
+soc-evidence data/synthetic/ssh-success-after-failures.log --format ssh
+```
+
+Expected: one `success_after_failures` alert.
+
+Export a Markdown report:
+
+```bash
+mkdir -p reports
+soc-evidence data/synthetic/ssh-failure-burst.log \
+  --format ssh \
+  --output-format markdown \
+  --output reports/failure-burst.md
+```
+
+An existing output file is refused. Choose a new file name for another export.
+
+Inspect available configuration options:
+
+```bash
+soc-evidence --help
+```
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A["Input bytes and SHA-256"] --> B{"Input format"}
+    B --> C["JSONL parser"]
+    B --> D["SSH parser"]
+    C --> E["Validated events and source references"]
+    D --> E
+    E --> F["Deduplication"]
+    F --> G["Temporal detection rules"]
+    G --> H["JSON or Markdown report"]
+```
+
+See [Architecture](docs/architecture.md) for module responsibilities
+and design decisions.
 
 ## Quality Checks
 
 ```bash
-python -m pytest -q
 python -m ruff check .
 python -m ruff format --check .
+python -m pytest -q
 ```
 
-## Architecture
+The latest observed local run passed 169 tests.
+A fresh local Python 3.14 development environment was also verified.
 
-JSON line → validation → authentication event → source reference
+GitHub Actions is configured to check dependencies, formatting, linting,
+tests and CLI execution on Ubuntu with Python 3.12 and 3.14.
+Remote CI results remain pending until the workflow runs on GitHub.
 
-Timestamps are normalized to UTC. Each event retains its source file
-and line number. Reading stops on the first invalid line.
+## Evaluation
+
+See [Detection Evaluation](docs/evaluation.md) for synthetic scenarios,
+label definitions, metrics and the baseline comparison.
+
+See [Performance Evaluation](docs/performance.md) for the benchmark method,
+recorded timings and memory measurements.
+
+Synthetic regression results do not establish real-world detection accuracy.
+A legitimate sequence of password mistakes can trigger an alert.
 
 ## Security Considerations
 
-Use authorized data and isolated laboratories.
-Examples are synthetic and perform no network connections.
-Do not commit real logs or credentials.
-Git ignore rules are not a security boundary.
+Use only synthetic data or logs you are authorized to analyze.
+Run demonstrations in isolated labs and execute the CLI without root privileges.
+
+Logs and reports may contain sensitive authentication metadata.
+Keep real inputs and generated reports outside public repositories.
+
+SHA-256 identifies input bytes; it does not prove log authenticity.
+The input file should remain stable while being read.
+
+See [Security Considerations](SECURITY.md) for handling guidance and reporting.
 
 ## Limitations
 
-- JSON ingestion requires the documented synthetic schema.
-- SSH ingestion supports only the password messages described below.
-- Operational evaluation, CI and final reproducibility checks are pending.
-- Source references do not verify file integrity.
-- Exact dependency versions are not locked yet.
-
-## Supported SSH Input
-
-The current parser supports:
-- ISO timestamps containing a year and timezone.
-- `sshd[PID]` messages.
-- `Accepted password` and `Failed password`.
-- Failed authentication for an `invalid user`.
-- IPv4 and IPv6 addresses.
-- An optional trailing `[preauth]` marker.
-
-Read the synthetic example:
-
-```bash
-python - <<'PY'
-from pathlib import Path
-from soc_evidence.reading import iter_ssh_events
-
-events = list(iter_ssh_events(Path("data/synthetic/ssh-demo.log")))
-print(f"Completed: {len(events)} SSH events")
-PY
-```
-
-Expected output: `Completed: 3 SSH events`.
-
-This is not a general-purpose system log parser.
-Unsupported messages stop ingestion rather than being silently ignored.
-Public-key authentication, PAM messages and dates without a year or
-timezone are not currently supported.
-
-## Repeated Authentication Failure Detection
-
-Default parameters:
-- Threshold: 5 failures.
-- Sliding window: 120 seconds, inclusive.
-- Grouping: hostname, source IP and username.
-
-Events are sorted by timestamp before analysis.
-An alert is emitted when the failure count crosses the threshold.
-A new alert becomes possible after the count falls below the threshold.
-Successful authentication does not clear previous failures.
-
-Run the synthetic demonstration:
-
-```bash
-python - <<'PY'
-from pathlib import Path
-from soc_evidence.detection import detect_failure_bursts
-from soc_evidence.reading import iter_ssh_events
-
-path = Path("data/synthetic/ssh-failure-burst.log")
-alerts = detect_failure_bursts(iter_ssh_events(path))
-print(f"Completed: {len(alerts)} alerts")
-PY
-```
-
-Expected output: `Completed: 1 alerts`.
-
-These parameters are demonstration defaults, not validated production
-recommendations. An alert does not prove malicious activity.
-The current implementation sorts input in memory.
-Repeated source references are deduplicated before detection.
-
-## Evidence Deduplication
-
-A source reference consists of the supplied file path and line number.
-
-- Repeated references with identical events are counted once.
-- Different source lines remain distinct, even with identical event content.
-- Conflicting events for the same reference stop analysis.
-- The deduplication result includes the number of duplicates removed.
-
-This does not identify copied files under different paths.
-File fingerprints and path normalization are not implemented yet.
-
-## Success After Failures
-
-Default parameters:
-- At least 3 failures before a successful authentication.
-- A 120-second lookback window, inclusive.
-- Matching hostname, source IP and username.
-
-Each successful authentication ends the previous failure sequence.
-Failures with the same timestamp as the success are not considered prior.
-Evidence contains the preceding failures and the final success.
-
-Run the synthetic example:
-
-```bash
-python - <<'PY'
-from pathlib import Path
-from soc_evidence.detection import detect_success_after_failures
-from soc_evidence.reading import iter_ssh_events
-
-path = Path("data/synthetic/ssh-success-after-failures.log")
-alerts = detect_success_after_failures(iter_ssh_events(path))
-print(f"Alerts: {len(alerts)}")
-PY
-```
-
-Expected output: one alert with four evidence records.
-
-This pattern can also represent legitimate password mistakes.
-The alert requires contextual investigation and does not prove compromise.
-
-## Multi-Account Authentication Failures
-
-Default parameters:
-- At least 5 distinct usernames with failed authentication.
-- A 300-second sliding window, inclusive.
-- Matching hostname and source IP.
-
-Repeated attempts against one username do not increase the account count.
-Successful authentications do not count toward this rule.
-An alert captures evidence at the threshold crossing.
-Further attempts do not update that alert.
-The rule rearms when the distinct-account count falls below the threshold.
-
-Run the synthetic example:
-
-```bash
-python - <<'PY'
-from pathlib import Path
-from soc_evidence.detection import detect_multi_account_failures
-from soc_evidence.reading import iter_ssh_events
-
-path = Path("data/synthetic/ssh-multi-account.log")
-alerts = detect_multi_account_failures(iter_ssh_events(path))
-print(f"Alerts: {len(alerts)}")
-PY
-```
-
-Expected output: one alert involving five distinct usernames.
-
-This pattern may warrant investigation for password spraying.
-Logs do not reveal attempted passwords, so the rule cannot establish
-that the same password was tried across accounts.
-Shared source IPs and legitimate activity may produce false positives.
-
-## Command-Line Interface
-
-After installation, analyze a file with:
-
-```bash
-soc-evidence data/synthetic/ssh-failure-burst.log --format ssh
-soc-evidence data/synthetic/auth-demo.jsonl --format jsonl
-soc-evidence --help
-```
-
-The CLI executes all three rules with default or custom parameters.
-It prints a JSON summary containing event counts, duplicate counts
-and alert counts per rule.
-
-Results are written to stdout. Errors are written to stderr.
-No completed summary is emitted if ingestion or detection fails.
-
-Exit codes:
-- 0: analysis completed, including when alerts were found.
-- 1: input or analysis error.
-- 2: invalid command-line arguments.
-
-JSON output includes summary counts, configuration and detailed alert evidence.
-
-## Detection Configuration
-
-| Option | Default | Meaning |
-|---|---:|---|
-| `--failure-threshold` | 5 | Failures against one account |
-| `--failure-window` | 120 | Failure window in seconds |
-| `--success-threshold` | 3 | Failures preceding a success |
-| `--success-window` | 120 | Success lookback in seconds |
-| `--account-threshold` | 5 | Distinct accounts with failures |
-| `--account-window` | 300 | Multi-account window in seconds |
-
-Thresholds must be integers of at least 2.
-CLI windows must be integers from 1 to 86400 seconds.
-The one-day maximum is a scope limit, not an operational recommendation.
-
-Example:
-
-```bash
-soc-evidence data/synthetic/ssh-failure-burst.log --format ssh --failure-threshold 6
-```
-
-Expected result: zero alerts for this five-failure fixture.
-The JSON output records the effective configuration for all three rules.
-
-## Report Export
-
-JSON reports include `schema_version`, effective configuration,
-alert counts and detailed evidence in `alert_details`.
-
-Print Markdown:
-
-```bash
-soc-evidence data/synthetic/ssh-success-after-failures.log --format ssh --output-format markdown
-```
-
-Save a new report:
-
-```bash
-mkdir -p reports
-soc-evidence data/synthetic/ssh-success-after-failures.log --format ssh --output reports/example.json
-soc-evidence data/synthetic/ssh-success-after-failures.log --format ssh --output-format markdown --output reports/example.md
-```
-
-The output directory must exist. Existing files are never overwritten.
-On Linux, exported files are created with owner-only permissions.
-Generated reports under `reports/` are ignored by Git.
-
-Reports contain usernames, IP addresses and source paths.
-Use synthetic examples for public demonstrations.
-An export error returns exit code 1; a failed write may leave a partial file.
-
-## Input Fingerprinting
-
-The CLI reads the input bytes once, calculates their SHA-256 fingerprint,
-then parses that same in-memory content.
-
-JSON and Markdown reports include the source path, byte size and fingerprint.
-Verify a file against the reported fingerprint with:
-
-    sha256sum data/synthetic/ssh-failure-burst.log
-
-A fingerprint identifies content; it does not prove log authenticity.
-The input file should be stable during reading.
-The CLI holds input bytes, decoded text and parsed events in memory.
-Large-file memory usage must be evaluated before operational use.
-
-Source-based deduplication still uses the supplied path and line number.
-Fingerprinting does not automatically deduplicate copied files.
-
-## Pinned Development Environment
-
-The development dependency snapshot is requirements-dev.lock.
-It records exact versions, including setuptools, but has no artifact hashes.
-It has been verified in a fresh local Python 3.14 environment.
-
-Install from the repository root:
-
-    python3 -m venv .venv
-    source .venv/bin/activate
-    python -m pip install -r requirements-dev.lock
-    python -m pip install --no-build-isolation --no-deps -e .
-    python -m pip check
-
-## Continuous Integration
-
-The configured GitHub Actions workflow checks formatting, linting,
-dependencies, tests and CLI execution on Ubuntu with Python 3.12 and 3.14.
-
-Remote CI results are pending until the repository is pushed to GitHub.
-Actions currently use major-version tags rather than immutable commit SHAs.
-
-## Architecture
-
-See [Architecture](docs/architecture.md) for the processing diagram,
-module responsibilities, design decisions and current limitations.
-
-## Security
-
-See [Security Considerations](SECURITY.md) for authorized use,
-data protection, input and output boundaries, and vulnerability reporting.
+- Analysis is offline; there is no live collection or automated response.
+- SSH parsing supports a specific ISO-timestamped password authentication format.
+- Unsupported or malformed input stops analysis.
+- Input bytes, decoded text and parsed events are held in memory.
+- Large files and dense event windows need further performance evaluation.
+- Deduplication uses supplied source references, not content across copied files.
+- Slow or distributed activity may remain below detection thresholds.
+- Alerts require contextual investigation and do not prove compromise.
+- A failed export may leave a partial output file.
+- CI actions currently use major-version tags rather than immutable commit SHAs.
+
+## Future Work
+
+- Evaluate more diverse, independently labeled authentication scenarios.
+- Measure behavior under dense event windows and larger inputs.
+- Improve resource bounds and output failure handling.
+- Extend supported log formats with explicit tests.
+- Pin CI actions to reviewed immutable commits.
+
+## License
+
+Distributed under the [MIT License](LICENSE).
