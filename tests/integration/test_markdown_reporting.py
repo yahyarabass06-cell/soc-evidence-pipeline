@@ -76,3 +76,13 @@ def test_markdown_is_deterministic():
     report = get_report("ssh-success-after-failures.log")
 
     assert render_markdown(report) == render_markdown(report)
+
+
+def test_markdown_contains_input_fingerprint():
+    report = get_report("ssh-failure-burst.log")
+
+    markdown = render_markdown(report)
+
+    assert "## Input Provenance" in markdown
+    assert report["input_source"]["sha256"] in markdown
+    assert f"**Size in bytes:** {report['input_source']['size_bytes']}" in markdown

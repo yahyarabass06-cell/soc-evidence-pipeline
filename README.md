@@ -280,3 +280,21 @@ Generated reports under `reports/` are ignored by Git.
 Reports contain usernames, IP addresses and source paths.
 Use synthetic examples for public demonstrations.
 An export error returns exit code 1; a failed write may leave a partial file.
+
+## Input Fingerprinting
+
+The CLI reads the input bytes once, calculates their SHA-256 fingerprint,
+then parses that same in-memory content.
+
+JSON and Markdown reports include the source path, byte size and fingerprint.
+Verify a file against the reported fingerprint with:
+
+    sha256sum data/synthetic/ssh-failure-burst.log
+
+A fingerprint identifies content; it does not prove log authenticity.
+The input file should be stable during reading.
+The CLI holds input bytes, decoded text and parsed events in memory.
+Large-file memory usage must be evaluated before operational use.
+
+Source-based deduplication still uses the supplied path and line number.
+Fingerprinting does not automatically deduplicate copied files.

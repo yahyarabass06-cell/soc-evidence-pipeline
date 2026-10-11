@@ -13,8 +13,8 @@ from soc_evidence.detection import (
     detect_success_after_failures,
 )
 from soc_evidence.exporting import write_new_report
+from soc_evidence.input_snapshot import load_input
 from soc_evidence.markdown_reporting import render_markdown
-from soc_evidence.reading import iter_json_events, iter_ssh_events
 from soc_evidence.reporting import serialize_alert
 
 
@@ -77,7 +77,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, help="New report file")
     parser.add_argument("--output-format", choices=("json", "markdown"), default="json")
     args = parser.parse_args(argv)
-    reader = iter_json_events if args.format == "jsonl" else iter_ssh_events
 
     rules = {
         "failure_burst": ("failure", detect_failure_bursts),
@@ -92,7 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     try:
-        records = list(reader(args.input))
+        snapshot = load_input(args.input, args.format)
+        records = snapshot.records
         unique = deduplicate_records(records)
         alert_counts = {}
         alert_details = []
@@ -111,6 +111,11 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": 1,
             "status": "complete",
             "input_format": args.format,
+            "input_source": {
+                "file_name": str(args.input),
+                "sha256": snapshot.sha256,
+                "size_bytes": snapshot.size_bytes,
+            },
             "records_read": len(records),
             "unique_records": len(unique.records),
             "duplicates_removed": unique.duplicates_removed,

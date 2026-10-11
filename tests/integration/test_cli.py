@@ -301,3 +301,20 @@ def test_missing_output_directory_returns_error(tmp_path):
     assert result.returncode == 1
     assert "FileNotFoundError" in result.stderr
     assert not output.exists()
+
+
+def test_json_report_identifies_input_bytes():
+    import hashlib
+
+    path = REPOSITORY_ROOT / "data" / "synthetic" / "ssh-failure-burst.log"
+    raw = path.read_bytes()
+
+    result = run_cli(path, "--format", "ssh")
+
+    assert result.returncode == 0
+    report = json.loads(result.stdout)
+    assert report["input_source"] == {
+        "file_name": str(path),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "size_bytes": len(raw),
+    }
