@@ -1,0 +1,100 @@
+{
+  "scenarios": [
+    {
+      "id": "normal_success",
+      "file": "normal_success.jsonl",
+      "format": "jsonl",
+      "expected_alert_counts": {
+        "failure_burst": 0,
+        "success_after_failures": 0,
+        "multi_account_failures": 0
+      },
+      "intent": "benign",
+      "explanation": "Successful login without preceding failures."
+    },
+    {
+      "id": "two_mistakes_then_success",
+      "file": "two_mistakes_then_success.jsonl",
+      "format": "jsonl",
+      "expected_alert_counts": {
+        "failure_burst": 0,
+        "success_after_failures": 0,
+        "multi_account_failures": 0
+      },
+      "intent": "benign",
+      "explanation": "Two mistakes remain below both single-account thresholds."
+    },
+    {
+      "id": "rapid_failure_burst",
+      "file": "rapid_failure_burst.jsonl",
+      "format": "jsonl",
+      "expected_alert_counts": {
+        "failure_burst": 1,
+        "success_after_failures": 0,
+        "multi_account_failures": 0
+      },
+      "intent": "simulated_suspicious",
+      "explanation": "Five failures within 120 seconds against one account."
+    },
+    {
+      "id": "success_after_three_failures",
+      "file": "success_after_three_failures.jsonl",
+      "format": "jsonl",
+      "expected_alert_counts": {
+        "failure_burst": 0,
+        "success_after_failures": 1,
+        "multi_account_failures": 0
+      },
+      "intent": "simulated_suspicious",
+      "explanation": "Three failures precede success; fewer than five failures."
+    },
+    {
+      "id": "five_accounts",
+      "file": "five_accounts.jsonl",
+      "format": "jsonl",
+      "expected_alert_counts": {
+        "failure_burst": 0,
+        "success_after_failures": 0,
+        "multi_account_failures": 1
+      },
+      "intent": "simulated_suspicious",
+      "explanation": "Five distinct accounts fail from one IP on one host."
+    },
+    {
+      "id": "slow_failures",
+      "file": "slow_failures.jsonl",
+      "format": "jsonl",
+      "expected_alert_counts": {
+        "failure_burst": 0,
+        "success_after_failures": 0,
+        "multi_account_failures": 0
+      },
+      "intent": "simulated_suspicious",
+      "explanation": "Attempts are too spread out for the configured burst rule."
+    },
+    {
+      "id": "separate_hosts",
+      "file": "separate_hosts.jsonl",
+      "format": "jsonl",
+      "expected_alert_counts": {
+        "failure_burst": 0,
+        "success_after_failures": 0,
+        "multi_account_failures": 0
+      },
+      "intent": "simulated_suspicious",
+      "explanation": "Each host receives only one failure."
+    },
+    {
+      "id": "legitimate_password_mistakes",
+      "file": "legitimate_password_mistakes.jsonl",
+      "format": "jsonl",
+      "expected_alert_counts": {
+        "failure_burst": 1,
+        "success_after_failures": 0,
+        "multi_account_failures": 0
+      },
+      "intent": "benign",
+      "explanation": "Legitimate mistakes match the failure pattern: intent is ambiguous."
+    }
+  ]
+}
