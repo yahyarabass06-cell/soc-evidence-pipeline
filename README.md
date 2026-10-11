@@ -320,3 +320,8 @@ dependencies, tests and CLI execution on Ubuntu with Python 3.12 and 3.14.
 
 Remote CI results are pending until the repository is pushed to GitHub.
 Actions currently use major-version tags rather than immutable commit SHAs.
+
+## Architecture
+
+See [Architecture](docs/architecture.md) for the processing diagram,
+module responsibilities, design decisions and current limitations.
