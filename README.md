@@ -6,7 +6,7 @@ Explainable Linux authentication detection and investigation pipeline.
 
 Under development. Event validation, provenance, synthetic JSON Lines
 and limited SSH password log ingestion are implemented.
-Repeated authentication failure detection is implemented.
+Repeated failure and success-after-failures detection are implemented.
 
 ## Requirements
 
@@ -63,7 +63,7 @@ Git ignore rules are not a security boundary.
 
 - JSON ingestion requires the documented synthetic schema.
 - SSH ingestion supports only the password messages described below.
-- Two additional detection rules and report generation are pending.
+- Multi-account detection and report generation are pending.
 - Source references do not verify file integrity.
 - Exact dependency versions are not locked yet.
 
@@ -140,3 +140,33 @@ A source reference consists of the supplied file path and line number.
 
 This does not identify copied files under different paths.
 File fingerprints and path normalization are not implemented yet.
+
+## Success After Failures
+
+Default parameters:
+- At least 3 failures before a successful authentication.
+- A 120-second lookback window, inclusive.
+- Matching hostname, source IP and username.
+
+Each successful authentication ends the previous failure sequence.
+Failures with the same timestamp as the success are not considered prior.
+Evidence contains the preceding failures and the final success.
+
+Run the synthetic example:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from soc_evidence.detection import detect_success_after_failures
+from soc_evidence.reading import iter_ssh_events
+
+path = Path("data/synthetic/ssh-success-after-failures.log")
+alerts = detect_success_after_failures(iter_ssh_events(path))
+print(f"Alerts: {len(alerts)}")
+PY
+```
+
+Expected output: one alert with four evidence records.
+
+This pattern can also represent legitimate password mistakes.
+The alert requires contextual investigation and does not prove compromise.

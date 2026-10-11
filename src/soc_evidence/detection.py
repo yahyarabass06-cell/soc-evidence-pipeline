@@ -63,3 +63,63 @@ def detect_failure_bursts(
             )
 
     return alerts
+
+
+@dataclass(frozen=True)
+class SuccessAfterFailuresAlert:
+    """Failures followed by a successful authentication."""
+
+    hostname: str
+    source_ip: str
+    username: str
+    evidence: tuple[RecordedEvent, ...]
+
+
+def detect_success_after_failures(
+    events: Iterable[RecordedEvent],
+    *,
+    threshold: int = 3,
+    window: timedelta = timedelta(minutes=2),
+) -> list[SuccessAfterFailuresAlert]:
+    """Detect success preceded by failures since the previous success."""
+    if type(threshold) is not int or threshold < 2:
+        raise ValueError("threshold must be an integer of at least 2")
+
+    if not isinstance(window, timedelta) or window <= timedelta(0):
+        raise ValueError("window must be a positive timedelta")
+
+    unique = deduplicate_records(events)
+    ordered = sorted(unique.records, key=lambda item: item.event.timestamp)
+    histories: dict[tuple[str, str, str], deque[RecordedEvent]] = {}
+    alerts = []
+
+    for recorded in ordered:
+        event = recorded.event
+        key = (event.hostname, event.source_ip, event.username)
+        history = histories.setdefault(key, deque())
+        cutoff = event.timestamp - window
+
+        while history and history[0].event.timestamp < cutoff:
+            history.popleft()
+
+        if event.outcome == "failure":
+            history.append(recorded)
+            continue
+
+        preceding = tuple(
+            item for item in history if item.event.timestamp < event.timestamp
+        )
+
+        if len(preceding) >= threshold:
+            alerts.append(
+                SuccessAfterFailuresAlert(
+                    hostname=event.hostname,
+                    source_ip=event.source_ip,
+                    username=event.username,
+                    evidence=preceding + (recorded,),
+                )
+            )
+
+        history.clear()
+
+    return alerts

@@ -4,7 +4,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from soc_evidence.detection import detect_failure_bursts
+from soc_evidence.detection import (
+    detect_failure_bursts,
+    detect_success_after_failures,
+)
 from soc_evidence.models import AuthEvent, RecordedEvent, SourceRef
 
 BASE_TIME = datetime(2026, 10, 11, 16, 0, tzinfo=UTC)
@@ -142,3 +145,117 @@ def test_repeated_evidence_does_not_inflate_an_alert():
 
     assert len(alerts) == 1
     assert len(alerts[0].evidence) == 5
+
+
+def test_success_after_failures_keeps_all_evidence():
+    events = [recorded_event(t, i + 1) for i, t in enumerate([0, 10, 20])]
+    success = recorded_event(30, 4, outcome="success")
+
+    alerts = detect_success_after_failures(events + [success])
+
+    assert len(alerts) == 1
+    assert alerts[0].username == "student"
+    assert alerts[0].evidence == tuple(events + [success])
+
+
+def test_success_with_too_few_failures_produces_no_alert():
+    events = [
+        recorded_event(0, 1),
+        recorded_event(10, 2),
+        recorded_event(20, 3, outcome="success"),
+    ]
+
+    assert detect_success_after_failures(events) == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("hostname", "another-server"),
+        ("username", "another-user"),
+        ("source_ip", "192.0.2.20"),
+    ],
+)
+def test_success_must_match_failure_entities(field, value):
+    events = [recorded_event(t, i + 1) for i, t in enumerate([0, 10, 20])]
+    events.append(recorded_event(30, 4, outcome="success", **{field: value}))
+
+    assert detect_success_after_failures(events) == []
+
+
+@pytest.mark.parametrize(
+    ("success_second", "expected_count"),
+    [(120, 1), (121, 0)],
+)
+def test_success_window_boundary(success_second, expected_count):
+    events = [recorded_event(t, i + 1) for i, t in enumerate([0, 10, 20])]
+    events.append(recorded_event(success_second, 4, outcome="success"))
+
+    assert len(detect_success_after_failures(events)) == expected_count
+
+
+def test_success_resets_the_failure_sequence():
+    events = [
+        recorded_event(0, 1),
+        recorded_event(10, 2),
+        recorded_event(20, 3, outcome="success"),
+        recorded_event(30, 4),
+        recorded_event(40, 5, outcome="success"),
+    ]
+
+    assert detect_success_after_failures(events) == []
+
+
+def test_duplicate_failures_do_not_trigger_success_alert():
+    failures = [recorded_event(0, 1), recorded_event(10, 2)]
+    success = recorded_event(20, 3, outcome="success")
+
+    assert detect_success_after_failures(failures + failures + [success]) == []
+
+
+def test_failure_at_success_timestamp_is_not_preceding():
+    events = [
+        recorded_event(0, 1),
+        recorded_event(10, 2),
+        recorded_event(20, 3),
+        recorded_event(20, 4, outcome="success"),
+    ]
+
+    assert detect_success_after_failures(events) == []
+
+
+@pytest.mark.parametrize("threshold", [0, 1, True, 2.5, "3"])
+def test_success_rule_rejects_invalid_threshold(threshold):
+    with pytest.raises(ValueError, match="threshold"):
+        detect_success_after_failures([], threshold=threshold)
+
+
+@pytest.mark.parametrize(
+    "window",
+    [timedelta(0), timedelta(seconds=-1), 120, None],
+)
+def test_success_rule_rejects_invalid_window(window):
+    with pytest.raises(ValueError, match="window"):
+        detect_success_after_failures([], window=window)
+
+
+def test_success_rule_sorts_unordered_input():
+    events = [recorded_event(t, i + 1) for i, t in enumerate([0, 10, 20])]
+    events.append(recorded_event(30, 4, outcome="success"))
+
+    expected = detect_success_after_failures(events)
+
+    assert len(expected) == 1
+    assert detect_success_after_failures(reversed(events)) == expected
+
+
+def test_second_success_does_not_reuse_previous_failures():
+    events = [recorded_event(t, i + 1) for i, t in enumerate([0, 10, 20])]
+    events.extend(
+        [
+            recorded_event(30, 4, outcome="success"),
+            recorded_event(40, 5, outcome="success"),
+        ]
+    )
+
+    assert len(detect_success_after_failures(events)) == 1
